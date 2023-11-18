@@ -1,0 +1,25 @@
+{
+  "name": "av-player",
+  "version": "0.1.0",
+  "description": "MSE based player following the design of Apple AVFoundation",
+  "main": "build/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "concurrently --kill-others \"tsc -w\" \"cd app && npm start\"",
+    "lint": "gts lint",
+    "clean": "gts clean",
+    "compile": "tsc",
+    "fix": "gts fix",
+    "prepare": "npm run compile",
+    "pretest": "npm run compile",
+    "posttest": "npm run lint"
+  },
+  "author": "Robert Galluccio",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "20.8.2",
+    "concurrently": "^8.2.2",
+    "gts": "^5.2.0",
+    "typescript": "^5.2.2"
+  }
+}
