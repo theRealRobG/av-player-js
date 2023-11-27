@@ -1,4 +1,4 @@
-import EventEmitter from '../event-emitter';
+import EventEmitter from '../utils/event-emitter';
 import StreamManager from '../stream/stream-manager';
 import AVQueuedSampleBufferRenderer from './av-queued-sample-buffer-renderer';
 

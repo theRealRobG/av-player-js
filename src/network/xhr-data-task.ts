@@ -1,4 +1,4 @@
-import EventEmitter from '../event-emitter';
+import EventEmitter from '../utils/event-emitter';
 import DataTask, {DataTaskOptions, ResponseType} from './data-task';
 import HttpMethod from './http-method';
 
