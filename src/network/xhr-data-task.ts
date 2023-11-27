@@ -2,11 +2,6 @@ import EventEmitter from '../event-emitter';
 import DataTask, {DataTaskOptions, ResponseType} from './data-task';
 import HttpMethod from './http-method';
 
-interface XhrCompletedDataTaskMetrics {
-  bytesDownloaded: number;
-  timeTakenInMilliSeconds: number;
-}
-
 interface ResponseDetails {
   responseUrl: string;
   statusCode: number;
@@ -14,8 +9,26 @@ interface ResponseDetails {
 }
 
 interface EventMap {
-  metrics: XhrCompletedDataTaskMetrics;
+  metrics: CompletedDataTaskMetrics;
   response: ResponseDetails;
+}
+
+/**
+ * Details about the completed data task.
+ */
+export interface CompletedDataTaskMetrics {
+  /**
+   * The time that the request started sending (realative to `Performance.timeOrigin`).
+   */
+  requestStartTimeInMilliseconds: number;
+  /**
+   * The number of bytes downloaded by the request.
+   */
+  bytesDownloaded: number;
+  /**
+   * The time taken to fully complete the request.
+   */
+  timeTakenInMilliSeconds: number;
 }
 
 /**
@@ -158,12 +171,16 @@ export default class XhrDataTask<T extends keyof ResponseType>
 
   private getMetricsEvent(
     event: ProgressEvent<EventTarget>
-  ): XhrCompletedDataTaskMetrics | undefined {
+  ): CompletedDataTaskMetrics | undefined {
     const requestStartTime = this.requestStartTime;
     if (requestStartTime) {
-      const now = performance.now();
-      const timeTaken = now - requestStartTime;
-      return {bytesDownloaded: event.total, timeTakenInMilliSeconds: timeTaken};
+      const requestEndTime = performance.now();
+      const timeTaken = requestEndTime - requestStartTime;
+      return {
+        requestStartTimeInMilliseconds: requestStartTime,
+        bytesDownloaded: event.total,
+        timeTakenInMilliSeconds: timeTaken,
+      };
     }
   }
 }

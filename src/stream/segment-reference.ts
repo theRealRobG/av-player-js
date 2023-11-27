@@ -1,9 +1,13 @@
+import Network from '../network';
+import DataTask from '../network/data-task';
+
 export default class SegmentReference {
   public get data(): ArrayBuffer | undefined {
     return this.sampleBuffer;
   }
 
-  private sampleBuffer: ArrayBuffer | undefined;
+  private sampleBuffer?: ArrayBuffer;
+  private dataTask?: DataTask<'arraybuffer'>;
 
   constructor(
     public readonly url: string,
@@ -11,11 +15,20 @@ export default class SegmentReference {
     public readonly estimatedDuration: number
   ) {}
 
-  public async resolve(): Promise<ArrayBuffer> {
-    throw new Error('Method not implemented.');
+  public async resolve(network: Network): Promise<ArrayBuffer> {
+    this.dataTask = network.dataTask({
+      url: this.url,
+      responseType: 'arraybuffer',
+    });
+    return this.dataTask.send();
   }
 
-  public async release() {
+  public release() {
     this.sampleBuffer = undefined;
+  }
+
+  public abortOngoingDownload() {
+    this.dataTask?.abort();
+    this.dataTask = undefined;
   }
 }
