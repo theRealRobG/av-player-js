@@ -66,7 +66,7 @@ export interface RenditionMetadata {
    *
    * For HLS this represents the `CHARACTERISTICS` of the `EXT-X-MEDIA` tag.
    */
-  intendedMediaRoles: [string];
+  intendedMediaRoles: string[];
 }
 
 export interface AudioRenditionMetadata extends RenditionMetadata {

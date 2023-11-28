@@ -89,4 +89,8 @@ export default class MediaSourceBufferController extends EventEmitter<{}> {
       this.onVideoBufferReadyForData();
     }
   }
+
+  public unsetStreamManager() {
+    throw new Error('TODO: not implemented');
+  }
 }

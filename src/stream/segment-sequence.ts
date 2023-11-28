@@ -49,7 +49,7 @@ export default class SegmentSequence {
   constructor(
     public readonly sequenceIndexId: string,
     public readonly mimeCodec: string,
-    public readonly initializationSegment: SegmentReference,
+    public readonly initializationSegment: ArrayBuffer,
     private segmentTemplate: SegmentTemplate,
     private currentIndex = 0
   ) {}
