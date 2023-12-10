@@ -60,7 +60,7 @@ export default class XhrDataTask<T extends keyof ResponseType>
     super({metrics: new Set(), response: new Set()});
 
     const {url, responseType} = options;
-    const timeoutInterval = options.timeoutInterval ?? 10;
+    const timeoutInterval = options.timeoutInterval ?? 0;
     const httpMethod = options.httpMethod ?? HttpMethod.Get;
     const httpBody = options.httpBody;
     const headers = options.headers ?? {};
