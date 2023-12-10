@@ -1,11 +1,26 @@
+import AsyncOperationQueue, {
+  AsyncOperation,
+} from '../utils/async-operation-queue';
 import EventEmitter from '../utils/event-emitter';
+import SampleBuffer from './sample-buffer';
 
 interface EventMap {
+  sourceBufferInitialized: SourceBuffer;
+  sourceBufferDidUpdate: void;
+  mediaDataReadyCallbackSet: () => void;
+  mediaDataReadyCallbackUnset: void;
   error: Error;
+}
+
+enum OperationType {
+  AppendSample,
+  WaitForUpdateEnd,
+  WaitForSourceBufferInit,
 }
 
 export interface SourceBufferFactory {
   addSourceBuffer(type: string): SourceBuffer;
+  removeSourceBuffer(sourceBuffer: SourceBuffer): void;
 }
 
 export interface MediaTimeBase {
@@ -28,10 +43,7 @@ export default class AVQueuedSampleBufferRenderer extends EventEmitter<EventMap>
     if (!this.sourceBuffer) {
       return false;
     }
-    return (
-      this.pendingSampleDataForEnqueue.length === 0 &&
-      !this.sourceBuffer.updating
-    );
+    return !this.isAppendingSampleData && !this.sourceBuffer.updating;
   }
 
   /**
@@ -54,21 +66,35 @@ export default class AVQueuedSampleBufferRenderer extends EventEmitter<EventMap>
    */
   private mediaDataReadyCallback: (() => void) | undefined;
   /**
-   * We only append to the `SampleBuffer` while not `updating`. This is so we can better understand
-   * our current end of buffered content before appending the next segment, as this can affect
-   * whether we need another one, and also what `timestampOffset` we need to set.
+   * A queue for helping ensure ordering of operations. For example, we only append to the
+   * `SampleBuffer` while not `updating`.
    */
-  private pendingSampleDataForEnqueue: ArrayBuffer[] = [];
+  private operationQueue = new AsyncOperationQueue<OperationType>();
+  /**
+   * A convenience getter to indicate whether the queue is currently appending sample data or not.
+   */
+  private get isAppendingSampleData(): boolean {
+    return this.operationQueue.hasOperationType(OperationType.AppendSample);
+  }
+  /**
+   * The init data that has last been added to the `SourceBuffer`. If new media samples need to be
+   * enqueued that require a different init segment then this needs to be updated. This should be
+   * stored here by reference without manipulation, so hopefully JavaScript isn't doing any
+   * unnecessary data copies.
+   */
+  private currentInitData?: ArrayBuffer;
 
   private onSourceBufferError = () => {
     this.notifyEvent('error', new Error('Error on SourceBuffer'));
   };
 
   private onSourceBufferUpdateEnd = () => {
-    const sampleBuffer = this.pendingSampleDataForEnqueue.shift();
-    if (sampleBuffer) {
-      this.enqueue(sampleBuffer);
-    } else if (this.isReadyForMoreMediaData && this.mediaDataReadyCallback) {
+    this.notifyEvent('sourceBufferDidUpdate');
+    if (this.isAppendingSampleData) {
+      // Wait until the current operation queue finishes before asking for more data.
+      return;
+    }
+    if (this.isReadyForMoreMediaData && this.mediaDataReadyCallback) {
       this.mediaDataReadyCallback();
     }
   };
@@ -78,6 +104,10 @@ export default class AVQueuedSampleBufferRenderer extends EventEmitter<EventMap>
     sourceBufferFactor: SourceBufferFactory
   ) {
     super({
+      sourceBufferInitialized: new Set(),
+      sourceBufferDidUpdate: new Set(),
+      mediaDataReadyCallbackSet: new Set(),
+      mediaDataReadyCallbackUnset: new Set(),
       error: new Set(),
     });
     this.mediaTimeBase = mediaTimeBase;
@@ -93,11 +123,25 @@ export default class AVQueuedSampleBufferRenderer extends EventEmitter<EventMap>
    */
   public init(mimeCodec: string) {
     const sourceBuffer = this.sourceBufferFactory.addSourceBuffer(mimeCodec);
+    this.sourceBuffer = sourceBuffer;
     sourceBuffer.mode = 'segments';
     sourceBuffer.addEventListener('error', this.onSourceBufferError);
     sourceBuffer.addEventListener('updateend', this.onSourceBufferUpdateEnd);
+    this.notifyEvent('sourceBufferInitialized', sourceBuffer);
     if (this.mediaDataReadyCallback) {
       this.mediaDataReadyCallback();
+    }
+  }
+
+  public destroy() {
+    if (this.sourceBuffer) {
+      this.sourceBuffer.removeEventListener('error', this.onSourceBufferError);
+      this.sourceBuffer.removeEventListener(
+        'updateend',
+        this.onSourceBufferUpdateEnd
+      );
+      this.mediaDataReadyCallback = undefined;
+      this.sourceBufferFactory.removeSourceBuffer(this.sourceBuffer);
     }
   }
 
@@ -106,12 +150,59 @@ export default class AVQueuedSampleBufferRenderer extends EventEmitter<EventMap>
    *
    * @param sampleBuffer The sample buffer (mp4 segment) to be enqueued.
    */
-  public enqueue(sampleBuffer: ArrayBuffer): void {
-    if (!this.sourceBuffer || !this.isReadyForMoreMediaData) {
-      this.pendingSampleDataForEnqueue.push(sampleBuffer);
-    } else {
-      this.sourceBuffer.appendBuffer(sampleBuffer);
-    }
+  public enqueue(sampleBuffer: SampleBuffer): void {
+    // Wait for source buffer to be set
+    this.operationQueue.addOperation(
+      new AsyncOperation<OperationType>(
+        OperationType.WaitForSourceBufferInit,
+        async op => {
+          if (op.isCancelled || this.sourceBuffer) {
+            // If cancelled or source buffer already set then we can exit early
+            return;
+          } else {
+            // Otherwise wait for the source buffer to be initialized
+            await this.waitForEvent('sourceBufferInitialized');
+          }
+        }
+      )
+    );
+    // Wait for any existing updates to end
+    this.operationQueue.addOperation(
+      new AsyncOperation<OperationType>(
+        OperationType.WaitForUpdateEnd,
+        async op => {
+          if (op.isCancelled) {
+            // If cancelled then we can exit early
+            return;
+          } else if (this.sourceBuffer?.updating) {
+            // If updating then wait for update end event
+            await this.waitForEvent('sourceBufferDidUpdate');
+          }
+        }
+      )
+    );
+    // Append sample data to source buffer
+    this.operationQueue.addOperation(
+      new AsyncOperation<OperationType>(
+        OperationType.AppendSample,
+        async op => {
+          if (op.isCancelled) {
+            return;
+          }
+          if (this.currentInitData !== sampleBuffer.initData) {
+            this.currentInitData = sampleBuffer.initData;
+            // Creating the updateend promise earlier than appending, just in case apppend results
+            // in an immediate updateend and we lose the event before waiting for it (it sounds
+            // unlikely but after enough years of async programming I am paranoid of stuff like
+            // that).
+            const waitForUpdateEnd = this.waitForEvent('sourceBufferDidUpdate');
+            this.sourceBuffer?.appendBuffer(sampleBuffer.initData);
+            await waitForUpdateEnd;
+          }
+          this.sourceBuffer?.appendBuffer(sampleBuffer.mediaData);
+        }
+      )
+    );
   }
 
   /**
@@ -126,6 +217,7 @@ export default class AVQueuedSampleBufferRenderer extends EventEmitter<EventMap>
    */
   public requestMediaDataWhenReady(using: () => void): void {
     this.mediaDataReadyCallback = using;
+    this.notifyEvent('mediaDataReadyCallbackSet', using);
     if (this.isReadyForMoreMediaData) {
       using();
     }
@@ -139,6 +231,7 @@ export default class AVQueuedSampleBufferRenderer extends EventEmitter<EventMap>
    */
   public stopRequestingMediaData(): void {
     this.mediaDataReadyCallback = undefined;
+    this.notifyEvent('mediaDataReadyCallbackUnset');
   }
 
   /**

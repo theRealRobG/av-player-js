@@ -37,6 +37,19 @@ export default class AsyncOperationQueue<T extends string | number> {
     }
   };
 
+  public isEmpty(): boolean {
+    return this.operationQueue.length === 0;
+  }
+
+  public hasOperationType(type: T): boolean {
+    for (let i = 0; i < this.operationQueue.length; i++) {
+      if (this.operationQueue[i].type === type) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   public addOperation(operation: AsyncOperation<T>) {
     this.operationQueue.push(operation);
     if (this.operationQueue.length === 1) {
