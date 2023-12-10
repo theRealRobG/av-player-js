@@ -110,6 +110,7 @@ export default class VideoHighRendition
   metadata = {
     estimatedBandwidth: 2400000,
     codecs: 'avc1.640028',
+    mimeCodec: 'video/mp4; codecs="avc1.640028"',
     intendedMediaRoles: [],
     resolution: {
       width: 1680,
@@ -119,16 +120,12 @@ export default class VideoHighRendition
     videoRange: VideoRange.SDR,
   };
 
-  private currentIndex = 0;
   private network = new Network({
     preferredRequestInterface: RequestInterface.XMLHttpRequest,
   });
   private resolvedSegmentSequence?: SegmentSequence;
-
-  async nextSegmentSequence(): Promise<SegmentSequence | undefined> {
-    if (this.currentIndex !== 0) {
-      return Promise.resolve(undefined);
-    }
+  
+  async currentSegmentSequence(): Promise<SegmentSequence> {
     if (this.resolvedSegmentSequence) {
       return Promise.resolve(this.resolvedSegmentSequence);
     }
@@ -137,10 +134,8 @@ export default class VideoHighRendition
       responseType: 'arraybuffer',
     });
     const initData = await initRequest.send();
-    this.currentIndex += 1;
     const segmentSequence = new SegmentSequence(
       '0',
-      'video/mp4; codecs="avc1.640028"',
       initData,
       new VideoHighSegmentTemplate(),
       0
@@ -149,9 +144,12 @@ export default class VideoHighRendition
     return segmentSequence;
   }
 
+  async nextSegmentSequence(): Promise<SegmentSequence | undefined> {
+    return Promise.resolve(undefined);
+  }
+
   async moveToTime(time: number): Promise<SegmentSequence | undefined> {
-    this.currentIndex = 0;
-    const segmentSequence = await this.nextSegmentSequence();
+    const segmentSequence = await this.currentSegmentSequence();
     if (!segmentSequence) {
       return;
     }

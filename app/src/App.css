@@ -9,30 +9,12 @@ body {
   color: var(--color-secondary);
 }
 
-.player-config {
-  width: 784px;
-  margin-bottom: 10px;
-}
-
 .player-container {
-  width: 784px;
-  height: 350px;
+  max-width: 100%;
   position: relative;
   background-color: #e3e3e3;
 }
 
-.player-container video {
-  width: inherit;
-  height: inherit;
-}
-
-.player-container .player-controls {
-  position: absolute;
-  box-sizing: border-box;
-  padding: 3px;
-  bottom: 0;
-  width: 100%;
-  z-index: 1;
-  background-color: rgba(33, 33, 33, 0.285);
-  color: var(--color-primary);
+.av-player-layer {
+  max-width: 100%;
 }
