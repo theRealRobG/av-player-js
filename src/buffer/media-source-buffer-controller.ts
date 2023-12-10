@@ -1,6 +1,7 @@
 import EventEmitter from '../utils/event-emitter';
 import StreamManager from '../stream/stream-manager';
 import AVQueuedSampleBufferRenderer from './av-queued-sample-buffer-renderer';
+import {ContentType} from '../stream/stream-rendition-metadata';
 
 /**
  * Controls buffering for the `MediaSource` object.
@@ -13,9 +14,13 @@ import AVQueuedSampleBufferRenderer from './av-queued-sample-buffer-renderer';
 export default class MediaSourceBufferController extends EventEmitter<{}> {
   private videoBuffer: AVQueuedSampleBufferRenderer;
   private audioBuffer: AVQueuedSampleBufferRenderer;
-  private mediaElement: HTMLMediaElement;
+  private videoElement: HTMLVideoElement;
   private mediaSource: MediaSource;
 
+  /**
+   * This is set to `true` once we have set the initial mime types / codecs for the source buffers.
+   */
+  private hasInitialized = false;
   /**
    * The stream manager is used to get data to feed into the buffer. This can be set after the
    * player has been created, or the user can re-use the same media source to start playing new
@@ -33,8 +38,17 @@ export default class MediaSourceBufferController extends EventEmitter<{}> {
    */
   private currentSequenceIndexId?: string;
 
-  private onVideoBufferReadyForData = () => {
-    throw new Error('TODO: not implemented');
+  private onVideoBufferReadyForData = async () => {
+    if (!this.currentStreamManager) {
+      return;
+    }
+    const {sample, moreSamplesMayBeResolved} =
+      await this.currentStreamManager.nextSample(ContentType.Video);
+    if (!sample) {
+      // TODO - handle ending the stream.
+      return;
+    }
+    this.videoBuffer.enqueue(sample);
   };
 
   private onVideoBufferError = (error: Error) => {
@@ -42,8 +56,17 @@ export default class MediaSourceBufferController extends EventEmitter<{}> {
     throw new Error('TODO: not implemented');
   };
 
-  private onAudioBufferReadyForData = () => {
-    throw new Error('TODO: not implemented');
+  private onAudioBufferReadyForData = async () => {
+    if (!this.currentStreamManager) {
+      return;
+    }
+    const {sample, moreSamplesMayBeResolved} =
+      await this.currentStreamManager.nextSample(ContentType.Audio);
+    if (!sample) {
+      // TODO - handle ending the stream.
+      return;
+    }
+    this.audioBuffer.enqueue(sample);
   };
 
   private onAudioBufferError = (error: Error) => {
@@ -51,20 +74,30 @@ export default class MediaSourceBufferController extends EventEmitter<{}> {
     throw new Error('TODO: not implemented');
   };
 
-  private onMediaSourceOpen = () => {
-    throw new Error('TODO: not implemented');
+  private onMediaSourceOpen = async () => {
+    if (!this.currentStreamManager) {
+      return;
+    }
+    try {
+      const initMimeCodecs = await this.currentStreamManager.init();
+      this.videoBuffer.init(initMimeCodecs.videoMimeCodec);
+      this.audioBuffer.init(initMimeCodecs.audioMimeCodec);
+    } catch (error) {
+      // TODO - sort out errors
+      console.error(error);
+    }
   };
 
-  constructor(mediaElement: HTMLMediaElement) {
+  constructor(videoElement: HTMLVideoElement) {
     super({});
-    this.mediaElement = mediaElement;
+    this.videoElement = videoElement;
     this.mediaSource = new MediaSource();
     this.videoBuffer = new AVQueuedSampleBufferRenderer(
-      this.mediaElement,
+      this.videoElement,
       this.mediaSource
     );
     this.audioBuffer = new AVQueuedSampleBufferRenderer(
-      this.mediaElement,
+      this.videoElement,
       this.mediaSource
     );
 
@@ -74,23 +107,29 @@ export default class MediaSourceBufferController extends EventEmitter<{}> {
     this.audioBuffer.addEventListener('error', this.onAudioBufferError);
     this.mediaSource.addEventListener('sourceopen', this.onMediaSourceOpen);
     // eslint-disable-next-line node/no-unsupported-features/node-builtins
-    this.mediaElement.src = URL.createObjectURL(this.mediaSource);
+    this.videoElement.src = URL.createObjectURL(this.mediaSource);
   }
 
   public setStreamManager(streamManager: StreamManager) {
     // Missing from this method is a clean up of the video/audio buffers and ensuring that new media
     // is being buffered from synchronized sources.
-    this.currentSequenceIndexId = undefined;
+    this.unsetStreamManager();
     this.currentStreamManager = streamManager;
-    if (this.audioBuffer.isReadyForMoreMediaData) {
-      this.onAudioBufferReadyForData();
+    if (this.mediaSource.readyState === 'open') {
+      this.onMediaSourceOpen();
     }
-    if (this.videoBuffer.isReadyForMoreMediaData) {
-      this.onVideoBufferReadyForData();
-    }
+    // if (this.audioBuffer.isReadyForMoreMediaData) {
+    //   this.onAudioBufferReadyForData();
+    // }
+    // if (this.videoBuffer.isReadyForMoreMediaData) {
+    //   this.onVideoBufferReadyForData();
+    // }
   }
 
   public unsetStreamManager() {
-    throw new Error('TODO: not implemented');
+    this.videoBuffer.destroy();
+    this.audioBuffer.destroy();
+    this.currentSequenceIndexId = undefined;
+    this.currentStreamManager = undefined;
   }
 }

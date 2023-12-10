@@ -40,7 +40,6 @@ export default class SegmentSequence {
    * @param sequenceIndexId The identifier for what sequence index within the stream this segment
    * sequence represents. Two `SegmentSequence` instances with the same `sequenceIndexId` provide
    * segment references that belong on the same continuous timeline.
-   * @param mimeCodec The MIME type (codec information) for the sequence.
    * @param initializationSegment The map segment that contains the parameter sets necessary for all
    * of the segment references contained in the sequence.
    * @param segmentTemplate The local segment references.
@@ -48,11 +47,14 @@ export default class SegmentSequence {
    */
   constructor(
     public readonly sequenceIndexId: string,
-    public readonly mimeCodec: string,
     public readonly initializationSegment: ArrayBuffer,
     private segmentTemplate: SegmentTemplate,
     private currentIndex = 0
   ) {}
+
+  public isComplete(): boolean {
+    return this.isEnded && this.segmentTemplate.isComplete;
+  }
 
   /**
    * Get the next segment reference and move the current index in the sequence up by one.

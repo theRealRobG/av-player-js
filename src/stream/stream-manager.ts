@@ -5,6 +5,16 @@ import Network from '../network';
 import StreamRendition from './stream-rendition';
 import {ContentType} from './stream-rendition-metadata';
 
+export interface InitMimeCodecs {
+  audioMimeCodec: string;
+  videoMimeCodec: string;
+}
+
+export interface SampleResponse {
+  sample?: SampleBuffer;
+  moreSamplesMayBeResolved: boolean;
+}
+
 /**
  * Responsible for arranging the stream into a viewable timeline for playback.
  */
@@ -13,7 +23,6 @@ export default class StreamManager {
   private availableVideoRenditions: StreamRendition<ContentType.Video>[] = [];
   private currentAudioRendition?: StreamRendition<ContentType.Audio>;
   private currentVideoRendition?: StreamRendition<ContentType.Video>;
-  private currentTime = 0;
 
   constructor(
     private network: Network,
@@ -24,11 +33,18 @@ export default class StreamManager {
   /**
    * Resolve the asset and select the starting audio and video rendition.
    */
-  public async init() {
+  public async init(): Promise<InitMimeCodecs> {
     const {audioRenditions, videoRenditions} =
       await this.assetResolver.resolve();
     this.availableAudioRenditions = audioRenditions;
     this.availableVideoRenditions = videoRenditions;
+    // TODO - add logic to pick first renditions.
+    this.currentAudioRendition = audioRenditions[0];
+    this.currentVideoRendition = videoRenditions[0];
+    return {
+      audioMimeCodec: this.currentAudioRendition.metadata.mimeCodec,
+      videoMimeCodec: this.currentVideoRendition.metadata.mimeCodec,
+    };
   }
 
   /**
@@ -40,8 +56,54 @@ export default class StreamManager {
    *
    * @param contentType The desired content type of the sample.
    */
-  public nextSample(contentType: ContentType): Promise<SampleBuffer> {
-    throw new Error('TODO - not implemented');
+  public async nextSample(contentType: ContentType): Promise<SampleResponse> {
+    let rendition: StreamRendition<ContentType> | undefined;
+    switch (contentType) {
+      case ContentType.Audio:
+        rendition = this.currentAudioRendition;
+        break;
+      case ContentType.Video:
+        rendition = this.currentVideoRendition;
+        break;
+    }
+    if (!rendition) {
+      throw new Error('TODO - error for no rendition selected on nextSample');
+    }
+    let segmentSequence = await rendition.currentSegmentSequence();
+    let segmentReference = segmentSequence.next();
+    if (!segmentReference) {
+      const nextSegmentSequence = await rendition.nextSegmentSequence();
+      if (!nextSegmentSequence) {
+        // In this scenario, we could maybe switch rendition, or otherwise give back nothing.
+        return {
+          sample: undefined,
+          moreSamplesMayBeResolved: !segmentSequence.isComplete(),
+        };
+      }
+      segmentSequence = nextSegmentSequence;
+      segmentReference = nextSegmentSequence.next();
+    }
+    if (!segmentReference) {
+      // If still no segment reference then we should give up. This whole logic should be extracted
+      // to a function to better hide this complexity.
+      throw new Error('TODO - need to handle getting no reference');
+    }
+    const dataTask = this.network.dataTask({
+      url: segmentReference.url,
+      responseType: 'arraybuffer',
+    });
+    const mediaData = await dataTask.send();
+    return {
+      sample: {
+        initData: segmentSequence.initializationSegment,
+        mediaData,
+        codec: rendition.metadata.codecs,
+        sequenceIndexId: segmentSequence.sequenceIndexId,
+        videoRange: (rendition as StreamRendition<ContentType.Video>).metadata
+          .videoRange,
+      },
+      moreSamplesMayBeResolved: true,
+    };
   }
 
   /**

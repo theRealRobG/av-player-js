@@ -24,6 +24,18 @@ export default interface StreamRendition<T extends ContentType> {
    */
   metadata: ContentToRenditionTypeMap[T];
   /**
+   * Get the current sequence of segments that are associated with this rendition.
+   *
+   * For DASH this will be the `Representation` in the current `Period` that matches the details of
+   * this `StreamRendition`.
+   *
+   * For HLS this will be the current discontinuity sequence within the current media playlist.
+   *
+   * If this is the first request then it can be expected that this triggers some network activity
+   * to provide more information about the segment references.
+   */
+  currentSegmentSequence(): Promise<SegmentSequence>;
+  /**
    * Get the next sequence of segments that are associated with this rendition.
    *
    * For DASH this will be the `Representation` in the next `Period` (if it exists) that matches the

@@ -28,7 +28,7 @@ export default class AVPlayer {
 
   private mediaSourceBufferController: MediaSourceBufferController;
 
-  constructor(video: HTMLMediaElement) {
+  constructor(video: HTMLVideoElement) {
     this.mediaSourceBufferController = new MediaSourceBufferController(video);
   }
 

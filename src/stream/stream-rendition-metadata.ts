@@ -60,6 +60,12 @@ export interface RenditionMetadata {
    */
   codecs: string;
   /**
+   * A mime type and codec combination that is useful for initializing a `SourceBuffer`.
+   *
+   * For example, for AAC-LC audio, we would expect `audio/mp4; codecs="mp4a.40.2"`.
+   */
+  mimeCodec: string;
+  /**
    * Provides a list of roles / characteristics that describe the intention of this media rendition.
    *
    * For DASH this represents the `Role@value` of the `AdaptationSet`.
