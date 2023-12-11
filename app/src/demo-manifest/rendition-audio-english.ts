@@ -104,7 +104,6 @@ export default class EnglishAudioRendition
     estimatedBandwidth: 0,
     // Will require splitting out audio and video codecs using knowledge of what is what codec type.
     codecs: 'mp4a.40.2',
-    mimeCodec: 'audio/mp4; codecs="mp4a.40.2"',
     intendedMediaRoles: [],
     language: 'en',
     channels: {

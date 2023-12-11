@@ -42,8 +42,8 @@ export default class StreamManager {
     this.currentAudioRendition = audioRenditions[0];
     this.currentVideoRendition = videoRenditions[0];
     return {
-      audioMimeCodec: this.currentAudioRendition.metadata.mimeCodec,
-      videoMimeCodec: this.currentVideoRendition.metadata.mimeCodec,
+      audioMimeCodec: `audio/mp4; codecs="${this.currentAudioRendition.metadata.codecs}"`,
+      videoMimeCodec: `video/mp4; codecs="${this.currentVideoRendition.metadata.codecs}"`,
     };
   }
 

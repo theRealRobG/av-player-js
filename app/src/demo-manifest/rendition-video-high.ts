@@ -110,7 +110,6 @@ export default class VideoHighRendition
   metadata = {
     estimatedBandwidth: 2400000,
     codecs: 'avc1.640028',
-    mimeCodec: 'video/mp4; codecs="avc1.640028"',
     intendedMediaRoles: [],
     resolution: {
       width: 1680,
